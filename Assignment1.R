@@ -99,3 +99,221 @@ word_freq_sorted <- sort(word_freq, decreasing = TRUE)
 top_10 <- head(word_freq_sorted, 10)
 
 cat("[2b] Top 10 most frequent words:", paste(names(top_10), top_10, sep = ": ", collapse = ", "), "\n")
+
+
+
+#task 3
+points <- data.frame(
+  id = 1:10,
+  x  = c( 60, 180,  80, 140,  20, 100, 200, 140,  40, 100),
+  y  = c(200, 200, 180, 180, 160, 160, 160, 140, 120, 120)
+)
+
+points
+
+
+compute_base_distance <- function(pts) {
+  n <- nrow(pts)
+  d <- matrix(0, nrow = n, ncol = n)
+  for (i in 1:n) {
+    for (j in 1:n) {
+      if (i != j) {
+        dx <- pts$x[i] - pts$x[j]
+        dy <- pts$y[i] - pts$y[j]
+        d[i, j] <- sqrt(dx^2 + dy^2)  # Euclidean distance
+      }
+    }
+  }
+  d
+}
+
+base_dist <- compute_base_distance(points)
+base_dist
+
+
+
+set.seed(351)  
+
+n <- nrow(points)
+
+
+traffic_factor <- matrix(runif(n * n, min = 0.8, max = 1.4), nrow = n)
+traffic_factor <- (traffic_factor + t(traffic_factor)) / 2  # 保持对称
+
+
+weather_factor <- matrix(runif(n * n, min = 0.9, max = 1.3), nrow = n)
+weather_factor <- (weather_factor + t(weather_factor)) / 2
+
+
+
+blocked <- matrix(FALSE, nrow = n, ncol = n)
+
+
+blocked[2, 7] <- FALSE; blocked[7, 2] <- FALSE
+blocked[3, 8] <- FALSE; blocked[8, 3] <- TRUE
+
+
+BIG <- 1e9  
+
+cost_mat <- base_dist * traffic_factor * weather_factor
+cost_mat[blocked] <- BIG
+
+
+cost_mat
+
+
+path_exists <- function(u, v, adj) {
+  n <- length(adj)
+  visited <- rep(FALSE, n)
+  stack <- c(u)
+  visited[u] <- TRUE
+  
+  while (length(stack) > 0) {
+    cur <- tail(stack, 1)
+    stack <- head(stack, -1)
+    
+    if (cur == v) return(TRUE)
+    
+    for (nb in adj[[cur]]) {
+      if (!visited[nb]) {
+        visited[nb] <- TRUE
+        stack <- c(stack, nb)
+      }
+    }
+  }
+  FALSE
+}
+
+cheapest_link_tour <- function(cost_mat) {
+  n <- nrow(cost_mat)
+  
+  
+  edges <- data.frame(i = integer(0), j = integer(0), w = numeric(0))
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      w <- cost_mat[i, j]
+      if (w < 1e8) {  
+        edges <- rbind(edges, data.frame(i = i, j = j, w = w))
+      }
+    }
+  }
+  edges <- edges[order(edges$w), ]  
+  
+
+  
+  deg  <- integer(n)          
+  adj  <- vector("list", n)   
+  sel  <- data.frame(i = integer(0), j = integer(0)) 
+  
+  for (k in 1:nrow(edges)) {
+    i <- edges$i[k]
+    j <- edges$j[k]
+    
+ 
+    if (deg[i] == 2 || deg[j] == 2) next
+    
+    if (nrow(sel) < n - 1) {
+      
+      if (path_exists(i, j, adj)) next
+      
+     
+      sel  <- rbind(sel, c(i, j))
+      adj[[i]] <- c(adj[[i]], j)
+      adj[[j]] <- c(adj[[j]], i)
+      deg[i] <- deg[i] + 1
+      deg[j] <- deg[j] + 1
+      
+    } else {
+     
+      if (deg[i] == 1 && deg[j] == 1) {
+        sel  <- rbind(sel, c(i, j))
+        adj[[i]] <- c(adj[[i]], j)
+        adj[[j]] <- c(adj[[j]], i)
+        deg[i] <- deg[i] + 1
+        deg[j] <- deg[j] + 1
+        break
+      }
+    }
+  }
+ 
+  start <- 1
+  tour  <- c(start)
+  prev  <- NA
+  cur   <- start
+  
+  repeat {
+    nbrs <- adj[[cur]]
+    
+   
+    if (is.na(prev)) {
+      next_candidates <- nbrs
+    } else {
+      next_candidates <- nbrs[nbrs != prev]
+    }
+    
+    if (length(next_candidates) == 0) break
+    nxt  <- next_candidates[1]
+    
+    prev <- cur
+    cur  <- nxt
+    if (cur == start) break
+    tour <- c(tour, cur)
+  }
+  
+ 
+  tour <- c(tour, start)
+  
+
+  total_dist <- 0
+  for (t in 1:(length(tour) - 1)) {
+    total_dist <- total_dist + cost_mat[tour[t], tour[t + 1]]
+  }
+  
+  list(
+    tour           = tour,          
+    total_distance = total_dist,    
+    selected_edges = sel
+  )
+}
+
+
+
+result <- cheapest_link_tour(cost_mat)
+
+
+tour_points <- result$tour  
+
+
+path_x <- points$x[tour_points]
+path_y <- points$y[tour_points]
+
+
+plot(points$x, points$y,
+     pch = 19,
+     col = "blue",
+     cex = 1.5,
+     xlab = "X",
+     ylab = "Y",
+     )
+
+
+text(points$x, points$y, labels = points$id, pos = 3)
+
+lines(path_x, path_y, col = "red", lwd = 2)
+
+points(path_x[1], path_y[1], pch = 21, bg = "yellow", cex = 2)
+
+library(graphics)
+arrows(path_x[-length(path_x)], path_y[-length(path_y)],
+       path_x[-1],             path_y[-1],
+       length = 0.1, col = "red")
+
+cat("Hamiltonian tour (order of points):\n")
+print(result$tour)
+
+cat("\nTotal distance/cost of round trip (with traffic, weather & closures):\n")
+print(result$total_distance)
+
+cat("\nSelected edges (i, j):\n")
+print(result$selected_edges)
+                                         
